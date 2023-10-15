@@ -1,5 +1,6 @@
 use glam::Vec2;
 
+use std::f32::consts::PI;
 use std::io::Write;
 use std::process::{ChildStdin, Command, Stdio};
 
@@ -11,6 +12,8 @@ const RECORD: bool = false;
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
 const PALETTE: [&'static str; 5] = ["#160729", "#171856", "#243771", "#416e8f", "#dbf3f1"];
+const SLOPE: f32 = 30.0;
+const SLOPE_ANGLE: f32 = SLOPE / 480.0;
 
 mod song;
 use song::NOTES;
@@ -18,6 +21,88 @@ use song::NOTES;
 fn main() {
     let mut sketch = Sketch::new();
     sketch.run();
+}
+
+const GRAVITY: Vec2 = Vec2 { x: 0.0, y: 1.0 };
+#[derive(Clone)]
+struct Particle {
+    pos: Vec2,
+    vel: Vec2,
+
+    lifetime: f32,
+}
+
+impl Particle {
+    fn new(pos: Vec2, vel: Vec2) -> Self {
+        Self {
+            pos,
+            vel,
+            lifetime: 0.0,
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.pos += self.vel;
+        self.vel += GRAVITY;
+        self.lifetime += FRAME_TIME as f32;
+    }
+}
+
+struct Particles {
+    particles: Vec<Particle>,
+    lines: Vec<(Vec2, Vec2)>,
+}
+
+impl Particles {
+    pub fn new() -> Self {
+        Self {
+            particles: Vec::new(),
+            lines: Vec::new(),
+        }
+    }
+
+    pub fn update(&mut self) {
+        for particle in &mut self.particles {
+            particle.update();
+        }
+        let new: Vec<Particle> = self
+            .particles
+            .iter()
+            .cloned()
+            .filter(|particle| !(particle.pos.y >= HEIGHT as f32))
+            .collect();
+        self.particles = new;
+    }
+
+    pub fn draw(&mut self, canvas: &mut Canvas) {
+        for particle in &self.particles {
+            let (pos, next_pos) = (particle.pos, particle.vel + particle.pos);
+            let mut middle = (pos + next_pos) / 2.0;
+            middle -= GRAVITY;
+            canvas.draw_curve(pos, middle, next_pos);
+        }
+        for line in &self.lines {
+            canvas.draw_line(line.0, line.1);
+        }
+        self.lines.clear()
+    }
+
+    fn particles_for_note(&mut self, pos: Vec2) {
+        let rest_y = HEIGHT as f32 - pos.y;
+        let end_x = rest_y * SLOPE_ANGLE + pos.x;
+        let end = Vec2::new(end_x, HEIGHT as f32);
+        self.lines.push((pos, end));
+        self.spawn_explosion(end);
+    }
+
+    fn spawn_explosion(&mut self, pos: Vec2) {
+        for i in 0..fastrand::usize(2..5) {
+            let mut vel = Vec2::from_angle(-fastrand::f32() * PI);
+            vel *= fastrand::f32() * 15.0;
+            let particle = Particle::new(pos, vel);
+            self.particles.push(particle);
+        }
+    }
 }
 
 struct Sketch {
@@ -28,7 +113,7 @@ struct Sketch {
     time: f32,
     visible_notes: Vec<(f32, u8)>,
     note_lowest_highest: (u8, u8),
-    slope: f32,
+    droplets: Particles,
 }
 
 impl Sketch {
@@ -44,7 +129,7 @@ impl Sketch {
             time: 0f32,
             visible_notes: Vec::new(),
             note_lowest_highest,
-            slope: 30.0,
+            droplets: Particles::new(),
         }
     }
 
@@ -58,7 +143,15 @@ impl Sketch {
     }
 
     fn update(&mut self) {
+        self.droplets.update();
         self.update_visible_notes();
+        for (time, note) in &self.visible_notes {
+            let close_to_end = time - self.time < FRAME_TIME as f32;
+            if close_to_end {
+                let pos = self.pos_for(&(*time, *note));
+                self.droplets.particles_for_note(pos);
+            }
+        }
     }
 
     fn draw(&mut self) {
@@ -79,6 +172,7 @@ impl Sketch {
             let pos = self.pos_for(note);
             self.canvas.draw_line(prev_pos, pos);
         }
+        self.droplets.draw(&mut self.canvas);
 
         if RECORD {
             self.ffmpeg
@@ -92,14 +186,14 @@ impl Sketch {
         let (time, note) = note;
         let time_left = time - self.time;
         let y = map(time_left, 0f32, VIEW, HEIGHT as f32, 0f32);
-        let slope_offset = map(y, 0.0, HEIGHT as f32, 0.0, self.slope);
+        let slope_offset = map(y, 0.0, HEIGHT as f32, 0.0, SLOPE);
         let (low, high) = self.note_lowest_highest;
         let x = map(
             *note as f32,
             low as f32,
             high as f32,
-            self.slope,
-            WIDTH as f32 - self.slope,
+            SLOPE,
+            WIDTH as f32 - SLOPE,
         );
         Vec2::new(x + slope_offset, y)
     }
