@@ -316,6 +316,9 @@ impl Canvas {
     fn draw_line(&mut self, from: Vec2, to: Vec2) {
         let delta = to - from;
         let axis_biggest_distance = (delta.x).abs().max((delta.y).abs()) as usize;
+        let palette_color =
+            map(axis_biggest_distance.min(20) as f32, 0.0, 20.0, 0.0, 5.0).round() as u8;
+        self.select_color(palette_color);
         let normalized = delta.normalize();
         for step in 0..axis_biggest_distance {
             let magnitude = step as f32;
