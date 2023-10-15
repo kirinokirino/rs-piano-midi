@@ -75,6 +75,7 @@ impl Particles {
     }
 
     pub fn draw(&mut self, canvas: &mut Canvas) {
+        canvas.select_color(2);
         for particle in &self.particles {
             let (pos, next_pos) = (particle.pos, particle.vel + particle.pos);
             let mut middle = (pos + next_pos) / 2.0;
@@ -166,8 +167,10 @@ impl Sketch {
         self.canvas.buffer.fill(0);
         // self.canvas.dim(10);
         //self.canvas.random();
-
+        let (low, high) = self.note_lowest_highest;
         for note in &self.visible_notes {
+            let palette = map(note.1 as f32, low as f32, high as f32, 0.0, 5.0).round() as u8;
+            self.canvas.select_color(palette);
             let prev_pos = self.pos_for(&(note.0 + FRAME_TIME as f32, note.1));
             let pos = self.pos_for(note);
             self.canvas.draw_line(prev_pos, pos);
@@ -211,7 +214,7 @@ impl Sketch {
 
     fn canvas() -> Canvas {
         let mut palette: Vec<_> = PALETTE.iter().map(hex_to_rgb).collect();
-        palette.extend([[0, 0, 0, 0]].repeat(1));
+        //palette.extend([[0, 0, 0, 0]].repeat(1));
         Canvas::new(palette)
     }
 
@@ -316,9 +319,6 @@ impl Canvas {
     fn draw_line(&mut self, from: Vec2, to: Vec2) {
         let delta = to - from;
         let axis_biggest_distance = (delta.x).abs().max((delta.y).abs()) as usize;
-        let palette_color =
-            map(axis_biggest_distance.min(20) as f32, 0.0, 20.0, 0.0, 5.0).round() as u8;
-        self.select_color(palette_color);
         let normalized = delta.normalize();
         for step in 0..axis_biggest_distance {
             let magnitude = step as f32;
