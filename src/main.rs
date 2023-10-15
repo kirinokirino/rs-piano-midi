@@ -4,10 +4,11 @@ use std::f32::consts::PI;
 use std::io::Write;
 use std::process::{ChildStdin, Command, Stdio};
 
-const FPS: f64 = 25.0;
+const FPS: f64 = 30.0;
 const FRAME_TIME: f64 = 1.0 / FPS;
-// seconds in view.
+// seconds of future notes visible on screen.
 const VIEW: f32 = 0.4;
+
 const RECORD: bool = false;
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
